@@ -1,0 +1,2 @@
+eclipse.preferences.version=1
+org.eclipse.core.variables.valueVariables=<?xml version\="1.0" encoding\="UTF-8" standalone\="no"?>\n<valueVariables>\n<valueVariable description\="" name\="PYSPARK_PYTHON" readOnly\="false" value\="/home/hduser/anaconda2/bin/python"/>\n<valueVariable description\="" name\="HADOOP_CONF_DIR" readOnly\="false" value\="/usr/local/hadoop/etc/hadoop"/>\n<valueVariable description\="" name\="SPARK_HOME" readOnly\="false" value\="/usr/local/spark"/>\n</valueVariables>\n

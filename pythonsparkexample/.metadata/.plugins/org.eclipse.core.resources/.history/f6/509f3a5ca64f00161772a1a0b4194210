@@ -1,0 +1,229 @@
+# -*- coding: UTF-8 -*-
+import sys
+from time import time
+import pandas as pd
+import matplotlib.pyplot as plt
+from pyspark import SparkConf, SparkContext
+from pyspark.mllib.classification import LogisticRegressionWithSGD
+from pyspark.mllib.regression import LabeledPoint
+import numpy as np
+from pyspark.mllib.evaluation import BinaryClassificationMetrics
+from pyspark.mllib.feature import StandardScaler
+
+
+def SetLogger( sc ):
+    logger = sc._jvm.org.apache.log4j
+    logger.LogManager.getLogger("org"). setLevel( logger.Level.ERROR )
+    logger.LogManager.getLogger("akka").setLevel( logger.Level.ERROR )
+    logger.LogManager.getRootLogger().setLevel(logger.Level.ERROR)    
+
+def SetPath(sc):
+    global Path
+    if sc.master[0:5]=="local" :
+        Path="file:/home/hduser/pythonsparkexample/PythonProject/"
+    else:   
+        Path="hdfs://master:9000/user/hduser/data/"
+
+def get_mapping(rdd, idx):
+    return rdd.map(lambda fields: fields[idx]).distinct().zipWithIndex().collectAsMap()
+
+def extract_label(record):
+    label=(record[-1])
+    return float(label)
+
+def extract_features(field,categoriesMap,featureEnd):
+    categoryIdx = categoriesMap[field[3]]
+    categoryFeatures = np.zeros(len(categoriesMap))
+    categoryFeatures[categoryIdx] = 1
+    numericalFeatures=[convert_float(field)  for  field in field[4: featureEnd]]    
+    return  np.concatenate(( categoryFeatures, numericalFeatures))
+
+def convert_float(x):
+    return (0 if x=="?" else float(x))
+
+def PrepareData(sc): 
+    #----------------------1.匯入並轉換資料-------------
+    global Path    
+
+    print("開始匯入資料...")
+    rawDataWithHeader = sc.textFile(Path+"train.tsv")
+    header = rawDataWithHeader.first() 
+    rawData = rawDataWithHeader.filter(lambda x:x !=header)    
+    rData=rawData.map(lambda x: x.replace("\"", ""))    
+    lines = rData.map(lambda x: x.split("\t"))
+    print("共計：" + str(lines.count()) + "筆")
+    #----------------------2.建立訓練評估所需資料 RDD[LabeledPoint]-------------
+    print "標準化之前：",
+    categoriesMap = lines.map(lambda fields: fields[3]). \
+                                        distinct().zipWithIndex().collectAsMap()
+    labelRDD = lines.map(lambda r:  extract_label(r))
+    featureRDD = lines.map(lambda r:  extract_features(r,categoriesMap,len(r) - 1))
+    for i in featureRDD.first():
+        print (str(i)+","),
+    print ""       
+    print "標準化之後：",       
+    stdScaler = StandardScaler(withMean=True, withStd=True).fit(featureRDD)
+    ScalerFeatureRDD=stdScaler.transform(featureRDD)
+    for i in ScalerFeatureRDD.first():
+        print (str(i)+","),
+    labelpoint=labelRDD.zip(ScalerFeatureRDD)
+    labelpointRDD=labelpoint.map(lambda r: LabeledPoint(r[0], r[1]))
+    #----------------------3.以隨機方式將資料分為3部份並且回傳-------------
+    (trainData, validationData, testData) = labelpointRDD.randomSplit([8, 1, 1])
+    print("將資料分trainData:" + str(trainData.count()) + 
+              "   validationData:" + str(validationData.count()) +
+              "   testData:" + str(testData.count()))
+    return (trainData, validationData, testData, categoriesMap) #回傳資料
+
+    
+def PredictData(sc,model,categoriesMap): 
+    print("開始匯入資料...")
+    rawDataWithHeader = sc.textFile(Path+"test.tsv")
+    header = rawDataWithHeader.first() 
+    rawData = rawDataWithHeader.filter(lambda x:x !=header)    
+    rData=rawData.map(lambda x: x.replace("\"", ""))    
+    lines = rData.map(lambda x: x.split("\t"))
+    print("共計：" + str(lines.count()) + "筆")
+    dataRDD = lines.map(lambda r:  ( r[0]  ,
+                            extract_features(r,categoriesMap,len(r) )))
+    DescDict = {
+           0: "暫時性網頁(ephemeral)",
+           1: "長青網頁(evergreen)"
+     }
+    for data in dataRDD.take(10):
+        predictResult = model.predict(data[1])
+        print " 網址：  " +str(data[0])+"\n" +\
+                  "             ==>預測:"+ str(predictResult)+ \
+                  " 說明:"+DescDict[predictResult] +"\n"
+
+def evaluateModel(model, validationData):
+    score = model.predict(validationData.map(lambda p: p.features))
+    scoreAndLabels=score.zip(validationData \
+                                   .map(lambda p: p.label))  \
+                                   .map(lambda (x,y): (float(x),float(y)) )
+    metrics = BinaryClassificationMetrics(scoreAndLabels)
+    AUC=metrics.areaUnderROC
+    return( AUC)
+
+
+def trainEvaluateModel(trainData,validationData,
+                                        numIterations, stepSize, miniBatchFraction):
+    startTime = time()
+    model = LogisticRegressionWithSGD.train(trainData, 
+                                        numIterations, stepSize, miniBatchFraction)
+    
+    AUC = evaluateModel(model, validationData)
+    duration = time() - startTime
+    print    "訓練評估：使用參數" + \
+                " numIterations="+str(numIterations) +\
+                " stepSize="+str(stepSize) + \
+                " miniBatchFraction="+str(miniBatchFraction) +\
+                 " 所需時間="+str(duration) + \
+                 " 結果AUC = " + str(AUC) 
+    return (AUC,duration, numIterations, stepSize, miniBatchFraction,model)
+
+
+def evalParameter(trainData, validationData, evalparm,
+                  numIterationsList, stepSizeList, miniBatchFractionList):
+    
+    metrics = [trainEvaluateModel(trainData, validationData,  
+                                numIterations,stepSize,  miniBatchFraction  ) 
+                       for numIterations in numIterationsList
+                       for stepSize in stepSizeList  
+                       for miniBatchFraction in miniBatchFractionList ]
+    
+    if evalparm=="numIterations":
+        IndexList=numIterationsList[:]
+    elif evalparm=="stepSize":
+        IndexList=stepSizeList[:]
+    elif evalparm=="miniBatchFraction":
+        IndexList=miniBatchFractionList[:]
+    
+    df = pd.DataFrame(metrics,index=IndexList,
+            columns=['AUC', 'duration','numIterations', 'stepSize', 'miniBatchFraction','model'])
+    ax = df['AUC'].plot(kind='bar', title =evalparm,figsize=(10,6),
+                        legend=True, fontsize=12)
+    ax.set_xlabel(evalparm,fontsize=12)
+    ax.set_xlabel
+    ax.set_ylim([0.5,0.7])
+    ax.set_ylabel("AUC",fontsize=12)
+    ax2 = ax.twinx()
+    ax2.plot(df[['duration']].values, linestyle='-', marker='o', linewidth=2.0,color='r')
+    plt.show()
+    
+def evalAllParameter(trainData, validationData, 
+                     numIterationsList, stepSizeList, miniBatchFractionList):    
+    metrics = [trainEvaluateModel(trainData, validationData,  
+                            numIterations,stepSize,  miniBatchFraction  ) 
+                      for numIterations in numIterationsList 
+                      for stepSize in stepSizeList  
+                      for  miniBatchFraction in miniBatchFractionList ]
+    
+    Smetrics = sorted(metrics, key=lambda k: k[0], reverse=True)
+    bestParameter=Smetrics[0]
+    
+    print("調校後最佳參數：numIterations:" + str(bestParameter[2]) + 
+                                      "  ,stepSize:" + str(bestParameter[3]) + 
+                                     "  ,miniBatchFraction:" + str(bestParameter[4])   + 
+                                      "  ,結果AUC = " + str(bestParameter[0]))
+    
+    return bestParameter[5]
+
+def  parametersEval(trainData, validationData):
+
+    print("----- 評估numIterations參數使用 ---------")
+    evalParameter(trainData, validationData,"numIterations", 
+                              numIterationsList=[5, 15, 20, 60, 100],   
+                              stepSizeList=[10],  
+                              miniBatchFractionList=[1 ])  
+ 
+    print("----- 評估stepSize參數使用 ---------")
+    evalParameter(trainData, validationData,"stepSize", 
+                              numIterationsList=[100],                    
+                              stepSizeList=[10, 50, 100, 200],    
+                              miniBatchFractionList=[1])   
+    
+        
+    print("----- 評估miniBatchFraction參數使用 ---------")
+    evalParameter(trainData, validationData,"miniBatchFraction", 
+                              numIterationsList=[100],      
+                              stepSizeList =[100],        
+                              miniBatchFractionList=[0.5, 0.8, 1 ])
+
+
+
+def CreateSparkContext():
+    sparkConf = SparkConf()                                                       \
+                         .setAppName("LogisticRegressionWithSGD")                         \
+                         .set("spark.ui.showConsoleProgress", "false") 
+    sc = SparkContext(conf = sparkConf)
+    print ("master="+sc.master)    
+    SetLogger(sc)
+    SetPath(sc)
+    return (sc)
+
+if __name__ == "__main__":
+    print("RunLogisticRegressionWithSGDBinary")
+    sc=CreateSparkContext()
+    print("==========資料準備階段===============")
+    (trainData, validationData, testData, categoriesMap) =PrepareData(sc)
+    trainData.persist(); validationData.persist(); testData.persist()
+    print("==========訓練評估階段===============")
+    (AUC,duration, numIterationsParm, stepSizeParm, miniBatchFractionParm,model)= \
+          trainEvaluateModel(trainData, validationData, 15, 10, 0.5)
+    if (len(sys.argv) == 2) and (sys.argv[1]=="-e"):
+        parametersEval(trainData, validationData)
+    elif   (len(sys.argv) == 2) and (sys.argv[1]=="-a"): 
+        print("-----所有參數交叉評估找出最好的參數組合---------")  
+        
+        model=evalAllParameter(trainData, validationData,
+                         [3, 5, 10,15], 
+                         [10, 50, 100],
+                          [0.5, 0.8, 1 ])
+            
+    print("==========測試階段===============")
+    auc = evaluateModel(model, testData)
+    print("使用test Data測試最佳模型,結果 AUC:" + str(auc))
+    print("==========預測資料===============")
+    PredictData(sc, model, categoriesMap)
+    

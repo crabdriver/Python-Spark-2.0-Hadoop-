@@ -1,0 +1,11 @@
+MODULES_MANAGER_V2
+Recommend|/home/hduser/pythonsparkexample/PythonProject/Recommend.py
+RecommendTrain|/home/hduser/pythonsparkexample/PythonProject/RecommendTrain.py
+RecommendTrainEval|/home/hduser/pythonsparkexample/PythonProject/RecommendTrainEval.py
+RunDecisionTreeBinary|/home/hduser/pythonsparkexample/PythonProject/RunDecisionTreeBinary.py
+RunDecisionTreeMulti|/home/hduser/pythonsparkexample/PythonProject/RunDecisionTreeMulti.py
+RunDecisionTreeRegression|/home/hduser/pythonsparkexample/PythonProject/RunDecisionTreeRegression.py
+RunLogisticRegressionWithSGDBinary|/home/hduser/pythonsparkexample/PythonProject/RunLogisticRegressionWithSGDBinary.py
+RunNaiveBayesBinary|/home/hduser/pythonsparkexample/PythonProject/RunNaiveBayesBinary.py
+RunSVMWithSGDBinary|/home/hduser/pythonsparkexample/PythonProject/RunSVMWithSGDBinary.py
+WordCount|/home/hduser/pythonsparkexample/PythonProject/WordCount.py

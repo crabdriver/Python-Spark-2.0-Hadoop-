@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<section name="Workbench">
+	<section name="SearchIndexPage">
+		<item value="4" key="HISTORY_SIZE"/>
+		<section name="HISTORY2">
+			<item value="data/" key="textPattern"/>
+			<item value="" key="scopeData"/>
+			<item value="2" key="scope"/>
+			<item value="*" key="filenamePattern"/>
+			<item value="false" key="isCaseSensitive"/>
+			<item value="false" key="isWholeWord"/>
+		</section>
+		<section name="HISTORY3">
+			<item value="file:/home/hduser/pythonwork/PythonProject/data/" key="textPattern"/>
+			<item value="" key="scopeData"/>
+			<item value="2" key="scope"/>
+			<item value="*" key="filenamePattern"/>
+			<item value="false" key="isCaseSensitive"/>
+			<item value="false" key="isWholeWord"/>
+		</section>
+		<section name="HISTORY0">
+			<item value="data/" key="textPattern"/>
+			<item value="RunDecisionTreeRegression" key="scopeData"/>
+			<item value="0" key="scope"/>
+			<item value="*" key="filenamePattern"/>
+			<item value="false" key="isCaseSensitive"/>
+			<item value="false" key="isWholeWord"/>
+		</section>
+		<section name="HISTORY1">
+			<item value="data/" key="textPattern"/>
+			<item value="Recommend" key="scopeData"/>
+			<item value="0" key="scope"/>
+			<item value="*" key="filenamePattern"/>
+			<item value="false" key="isCaseSensitive"/>
+			<item value="false" key="isWholeWord"/>
+		</section>
+	</section>
+</section>
